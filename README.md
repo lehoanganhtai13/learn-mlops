@@ -2,11 +2,126 @@
 A self-study repo, where there is everything you need for a MLOps system. This could also apply for DevOps system.
 
 
-## How to use AWS
+## 1. How to use AWS
 
 ### AWS CLI
+1. Credential configuration
+    ```bash
+    aws configure
+    ```
+- Output:
+    - AWS Access Key ID: `ACCESS KEY ID`
+    - AWS Secret Access Key: `SECRET ACCESS KEY`
+    - Default region name: `REGION`
+    - Default output format [None]: `ENTER`
+2. IAM (Identity & Access management)
+- Create group/user:
+    ```bash
+    aws iam create-[group/user] --[group/user]-name <NAME> --region <REGION>
+    ```
+- Create role:
+    ```bash
+    aws iam create-role --role-name <NAME> \
+                        --assume-role-policy-document file://<LOCAL_PATH>/trust_policy.json \
+                        --region <REGION> --description "<DESCRIPTION>"
+    ```
+    - `DESCRIPTION`: your description for your custom role, usually it will be "Allows `service-name` to call AWS services on your behalf.".
+    - `LOCAL_PATH`: relative path to folder containing your trust policy file.
+    - Trust policy file example for AWS Glue service:
+    ```json
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "glue.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+            }
+        ]
+    }
+    ```
+- Create policy:
+    ```bash
+    aws iam create-policy   --policy-name <NAME> \
+                            --policy-document file://<LOCAL_PATH>/policy.json \
+                            --region <REGION> --description "<DESCRIPTION>"
+    ```
+    - `DESCRIPTION`: your description for your custom policy.
+    - `LOCAL_PATH`: relative path to folder containing your policy file.
+    - Policy file example to get access to S3 bucket `BUCKET_NAME`:
+    ```json
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "",
+                "Effect": "Allow",
+                "Action": [
+                    "s3:ListBucket*",
+                    "s3:PutBucket*",
+                    "s3:GetBucket*"
+                ],
+                "Resource": [
+                    "arn:aws:s3:::<BUCKET_NAME>"
+                    "arn:aws:s3:::<BUCKET_NAME>/*"
+                ]
+            }
+        ]
+    }
+    ```
+- Add user to group:
+    ```bash
+    aws iam add-user-to-group --group-name <GROUP_NAME> --user-name <USER_NAME> --region <REGION>
+    ```
+- Attach group/user/role policy:
+    ```bash
+    aws iam attach-[group/user/role]-policy --[group/user/role]-name <NAME> \
+                                            --policy-arn <ARN> \
+                                            --region <REGION>
+    ```
+    - `NAME`: group, user, or role name to be attached policy.
+    - `ARN`: the Amazon Resource Name of the policy to be attached. There are 2 types of ARN for this scenario:
+        - ARN for AWS managed policies is `arn:aws:iam::aws:policy/<policy-name>`, for policies that are service role for example `AWSGlueServiceRole` will be `arn:aws:iam::aws:policy/service-role/<policy-name>`.
+        - ARN for customer managed policies is `arn:aws:iam::<account-id-with-no-hyphens>:policy/<policy-name>`.
+- Detach group/user/role policy:
+    ```bash
+    aws iam detach-[group/user/role]-policy --[group/user/role]-name <NAME> \
+				 	                        --policy-arn <ARN>
+    ```
+    - `NAME`: group, user, or role name to be detached policy.
+    - `ARN`: the Amazon Resource Name of the policy to be detached. There are 2 types of ARN for this scenario:
+        - ARN for AWS managed policies is `arn:aws:iam::aws:policy/<policy-name>`, for policies that are service role for example `AWSGlueServiceRole` will be `arn:aws:iam::aws:policy/service-role/<policy-name>`.
+        - ARN for customer managed policies is `arn:aws:iam::<account-id-with-no-hyphens>:policy/<policy-name>`.
+- Delete group/user/role:
+    ```bash
+    aws iam delete-[group/user/role] --[group/user/role]-name <NAME>
+    ```
+    - `NAME`: group, user, or role name to be deleted.
+- Detach group/user/role policy:
+    ```bash
+    aws iam delete-policy --policy-arn <ARN>
+    ```
+    - `ARN`: the Amazon Resource Name of the policy to be detached. There are 2 types of ARN for this scenario:
+        - ARN for AWS managed policies is `arn:aws:iam::aws:policy/<policy-name>`, for policies that are service role for example `AWSGlueServiceRole` will be `arn:aws:iam::aws:policy/service-role/<policy-name>`.
+        - ARN for customer managed policies is `arn:aws:iam::<account-id-with-no-hyphens>:policy/<policy-name>`.
+- List groups/users/roles/policies:
+    ```bash
+    aws iam list-[groups/users/roles/policies]
+    ```
+- Remove user from group:
+    ```bash
+    aws iam remove-user-from-group --group-name <GROUP_NAME> --user-name <USER_NAME>
+    ```
+- List all policies attached to group/user/role:
+    ```bash
+    aws iam list-attached-[group/user/role]-policies    --[group/user/role]-name <NAME> \
+                                                        --scope <MANAGE_TYPE>
+    ```
+    - `MANAGE_TYPE`: we will use `All` for all policies including AWS-managed policies and the customer managed policies in your AWS account, `AWS` for only AWS-managed policies, and `Local` for only the customer managed policies in your AWS account.
 
-## How to use Docker
+## 2. How to use Docker
 
 ### Docker commands
 1. Run container
