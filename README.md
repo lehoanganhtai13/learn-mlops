@@ -121,6 +121,276 @@ A self-study repo, where there is everything you need for a MLOps system. This c
     ```
     - `MANAGE_TYPE`: we will use `All` for all policies including AWS-managed policies and the customer managed policies in your AWS account, `AWS` for only AWS-managed policies, and `Local` for only the customer managed policies in your AWS account.
 
+3. Amazon S3 (Storage)
+- Create bucket
+    ```bash
+    aws s3 mb s3://<BUCKET_NAME> --region <REGION>
+    ```
+
+- Remove bucket
+    ```bash
+    aws s3 rb s3://<BUCKET_NAME> --force
+    ```
+
+- Create a folder
+    ```bash
+    aws s3api put-object --bucket <BUCKET_NAME> --key <FOLDER_PATH> --content-length 0
+    ```
+    - `FOLDER_PATH`: key name of the object you're creating in the S3 bucket. If it is a single folder, it will be `folder-name`. If it is subfolder, it will be `path-to-folder-containing-subfolder/subfolder-name`.
+
+- List S3 objects/buckets
+    ```bash
+    aws s3 ls <S3Uri> --recursive --region <REGION> --summarize --human-readable
+    ```
+    - `S3Uri`: it could be known as the path to the objects or buckets in S3, for a bucket it will be `s3://<bucket-name>`, for a folder in bucket it will be `s3://<bucket-name>/<path-to-the-specific-folder>`.
+
+- Copy/Move S3 objects, files
+    ```bash
+    aws s3 cp/mv <SOURCE> <TARGET> \
+                --recursive \
+                --include "<INCLUDED_FILE_PATTERNS>" \
+                --exclude "<EXCLUDED_FILE_PATTERNS>"
+    ```
+    - `SOURCE`: can be either a local file/directory path or an S3 object/bucket path.
+        - A local file path: This is the path to a file on your local machine that you want to copy or move. For example, `./<file-name>.txt` or `/home/user/<path-to-folder>/<file-name>.txt`.
+        - A local directory path: This is the path to a directory on your local machine that you want to copy or move. For example, `./<folder-name>` or `/home/user/<path-to-folder>`.
+        - An S3 object path: This is the path to an object in an S3 bucket that you want to copy or move. For example, `s3://<bucket-name>/<file-name>.txt` or `s3://<bucket-name>/<path-to-folder>/<file-name>.txt`.
+        - An S3 bucket path: This is the path to an S3 bucket, potentially with a prefix, from which you want to copy or move all matching objects. For example, `s3://<bucket-name>` or `s3://<bucket-name>/<path-to-folder>`.
+    - `TARGET`: can be either a local file/directory path or an S3 object/bucket path.
+        - A local directory path: This is the path to a directory on your local machine where you want to copy or move the source file or directory to. For example, `./<path-to-folder>` or `/home/user/<path-to-folder>`.
+        - An S3 object path: This is the path where you want to copy or move the source file to in an S3 bucket. For example, `s3://<bucket-name>/<file-name>.txt` or `s3://<bucket-name>/<path-to-folder>/<file-name>.txt`.
+        - An S3 bucket path: This is the path to an S3 bucket, potentially with a prefix, where you want to copy or move all matching source objects to. For example, `s3://<bucket-name>` or `s3://<bucket-name>/<path-to-folder>`.
+    - `INCLUDED_FILE_PATTERNS` and `EXCLUDED_FILE_PATTERNS`: patterns to specify which files to include or exclude when copying or moving files, if `SOURCE` is path to a folder. For example, to include all `.txt` files, you would use `*.txt`, or if exclude or `.jpg` files in `temp` folder, you would use `temp/*.jpg`.
+    - `--recursive`: used only when `SOURCE` is not path to a specific file.
+
+4. AWS Lake Formation (Data Lake management)
+- Add administrator for data lake
+    ```bash
+    aws lakeformation put-data-lake-settings --data-lake-settings '{ "DataLakeAdmins": [{ "DataLakePrincipalIdentifier": "arn:aws:iam::<ACCOUNT_ID>:user/<USER_NAME>" }] }' \
+                                            --cli-input-json file://<LOCAL_PATH>/settings.json	
+    ```
+    - `LOCAL_PATH`: relative path to folder containing your settings file.
+    - Setting file example:
+    ```json
+    {
+        "DataLakeSettings": {
+            "CreateDatabaseDefaultPermissions": [],
+            "CreateTableDefaultPermissions": []
+        }
+    }
+    ```
+
+- Register storage as resource for lake formation
+    ```bash
+    aws lakeformation register-resource --resource-arn arn:aws:s3:::<BUCKET_NAME>/<PATH_TO_FOLDER>/ --use-service-linked-role
+    ```
+
+- Grant data lake permissions for database and its tables
+    ```bash
+    aws lakeformation grant-permissions --principal "{ "DataLakePrincipalIdentifier": "arn:aws:iam::<ACCOUNT_ID>:[user/role]/<[USER/ROLE]_NAME>" }" \
+                                        --cli-input-json file://<LOCAL_PATH>/permissions.json
+    ```
+    - `LOCAL_PATH`: relative path to folder containing your permissions file.
+    - Permissions file example for a specific table in database, use only 1 type `Table` or `TableWithColumns` based on access level demands of different users or roles:
+    ```json
+    {
+        "Resource": {
+            "Table": {
+                    "DatabaseName": "<DATABASE_NAME>",
+                    "Name": "<TABLE_NAME>"
+            },
+            "TableWithColumns": {
+                    "DatabaseName": "<DATABASE_NAME>",
+                    "Name": "<TABLE_NAME>",
+                    "ColumnNames": ["<COLUMN_1>", "<COLUMN_2> ..."]
+            }
+        },
+        "Permissions": ["SELECT" "<PERMISSION_2>" ...]
+    }
+    ```
+
+5. AWS Glue (ETL)
+- Create database for data cataloging
+    ```bash
+    aws glue create-database --database-input '{"Name": "<DATABASE_NAME>", "LocationUri": "s3://<BUCKET_NAME>/<PATH_TO_FOLDER>", "Description": "<DESCRIPTION>"}'
+    ```
+    - `DESCRIPTION`: description for your database.
+
+- Create crawler with specific targets, role, and optional schedule
+    ```bash
+    aws glue create-crawler --name <CRAWLER_NAME> --role <IAM_ROLE> --database-name <DATABASE_NAME> \
+                                                --targets '{ "S3Targets": [{ "Path": "s3://<BUCKET_NAME>/<PATH_TO_FOLDER>/" }] }' \
+						                        --recrawl-policy '{ "RecrawlBehavior": "<CRAWL_BEHAVIOR>" }' \
+                                                --schedule 'cron(<CRON_EXPRESSION>)'
+    ```
+    - `CRAWL_BEHAVIOR`: it can be `CRAWL_EVERYTHING` to crawl all the data sources, including the ones it has previously crawled; `CRAWL_NEW_FOLDERS_ONLY` to only crawl the new data sources since the last crawl; `CRAWL_EVENT_MODE` to crawl only the changes identified by Amazon S3 events.
+    - `CRON_EXPRESSION`: a string to define the schedule for when to start the crawler in format `Minutes Hours Day-of-month Month Day-of-week Year`, with `?` to specify "no specific value", and `*` to specify "every value" of a specific  field.
+        - `Minutes`: An integer from 0 to 59.
+        - `Hours`: An integer from 0 to 23.
+        - `Day-of-month`: An integer from 1 to 31.
+        - `Month`: An integer from 1 to 12.
+        - `Day-of-week`: An integer from 1 to 7 (1 is Sunday, and 7 is Saturday).
+        - `Year`: A four-digit integer.
+
+- Run crawler
+    ```bash
+    aws glue start-crawler --name <CRAWLER_NAME>
+    ```
+
+- Get list of tables in a specified database
+    ```bash
+    aws glue get-tables --database-name <DATABASE_NAME>
+    ```
+
+6. Amazon Kinesis Data Firehose (data real-time streaming)
+- Create a Firehose delivery stream
+    ```bash
+    aws firehose create-delivery-stream --delivery-stream-name <STREAM_NAME> \
+                                        --delivery-stream-type <STREAM_TYPE> \
+                                        --s3-destination-configuration '{
+                                            "RoleARN": "arn:aws:iam::<ACCOUND_ID>:role/<ROLE_NAME>",
+                                            "BucketARN": "arn:aws:s3:::<BUCKET_NAME>",
+                                            "Prefix": "<PATH_TO_FOLDER>/",
+                                            "BufferingHints": {
+                                                "SizeInMBs": <BUFFER_SIZE>,
+                                                "IntervalInSeconds": <BUFFER_INTERVAL>
+                                            }
+                                        }'
+    ```
+    - `STREAM_TYPE`: type of the delivery stream. It can be one of the following values:
+        - `DirectPut`: data records are delivered to your destination with no additional processing.
+        - `KinesisStreamAsSource`: the delivery stream uses a `Kinesis Data Stream` as a source.
+    - `PATH_TO_FOLDER`: the prefix that Firehose applies to the data record object names in S3, which simulates a folder structure in the S3 bucket where the streamed data is stored.
+    - `ROLE_NAME`: name of the IAM role that has permissions to access the S3 bucket.
+    - `BUFFER_SIZE`: size of the buffer, in MBs, used for buffering incoming data before delivering it to the S3 bucket, the value should be between 1 and 128. The data is delivered to the S3 bucket when either the buffer size reaches or the time period elapses.
+    - `BUFFER_INTERVAL`: the time, in seconds, for buffering incoming data before delivering it to the S3 bucket, the value should be between 60 (1 minute) and 900 (15 minutes).
+
+- Delete a delivery stream and its data
+    ```bash
+    aws firehose delete-delivery-stream --delivery-stream-name <STREAM_NAME>
+    ```
+
+- Describe the specified delivery stream and its status
+    ```bash
+    aws firehose describe-delivery-stream --delivery-stream-name <STREAM_NAME>
+    ```
+
+- List your delivery streams in alphabetical order of their names
+    ```bash
+    aws firehose list-delivery-streams
+    ```
+
+7. AWS IoT Core
+- Create a thing
+    ```bash
+    aws iot create-thing --thing-name <THING_NAME>
+    ```
+
+- Create an IoT policy
+    ```bash
+    aws iot create-policy --policy-name <POLICY_NAME> --policy-document file://<LOCAL_PATH>/policy.json
+    ```
+    - `LOCAL_PATH`: relative path to folder containing your IoT policy file.
+    - IoT policy file example:
+    ```json
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Publish",
+                "iot:Receive",
+                "iot:PublishRetain"
+            ],
+            "Resource": [
+                "arn:aws:iot:<REGION>:<ACCOUNT_ID>:topic/<IOT_TOPIC>",
+            ]
+            },
+            {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Subscribe"
+            ],
+            "Resource": [
+                "arn:aws:iot:<REGION>:<ACCOUNT_ID>:topicfilter/<IOT_TOPIC>",
+            ]
+            },
+            {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Connect"
+            ],
+            "Resource": [
+                "arn:aws:iot:<REGION>:<ACCOUNT_ID>:client/<CLIENT_ID>",
+            ]
+            }
+        ]
+    }
+    ```
+
+- List all certificates info (ARN, ID, status, created date)
+    ```bash
+    aws iot list-certificates
+    ```
+
+- Attach policy to a thing/group of thing/certificate
+    ```bash
+    aws iot attach-policy --policy-name <POLICY_NAME> --target "<ARN>"
+    ```
+    - `ARN`: the Amazon Resource Name of the target to be attached, usually is ARN of a certificate in this format `arn:aws:iot:<region>:<account-id>:cert/<certificate-id>`, if for a thing it would be `arn:aws:iot:<region>:<account-id>:thing/<thing-name>`, or `arn:aws:iot:<region>:<account-id>:thinggroup/<group-name>` for group of thing.
+
+- Creates a 2048-bit RSA key pair and issues an X.509 certificate using the issued public key to create an IoT MQTT client
+    ```bash
+    aws iot create-keys-and-certificate --set-as-active \
+                                        --certificate-pem-outfile "<THING_NAME>.cert.pem" \
+                                        --public-key-outfile "<THING_NAME>.public.key" \
+                                        --private-key-outfile "<THING_NAME>.private.key"
+    ```
+    - The `root_ca` - root certificate authority - can be downloaded here [here](https://www.amazontrust.com/repository/AmazonRootCA1.pem). 
+
+- Attach a certificate to a thing
+    ```bash
+    aws iot attach-policy --policy-name <POLICY_NAME> --target "arn:aws:iot:<REGION>:<ACCOUNT_ID>:cert/<CERTIFICATE_ID>"
+    ```
+    - `CERTIFICATE_ARN`:
+
+- Create a rule for AWS IoT to listen to MQTT topics and invoke actions when certain conditions are met
+    ```bash
+    aws iot create-topic-rule --rule-name <RULE_NAME> --topic-rule-payload file://<LOCAL_PATH>/IoT_rule.json
+    ```
+    - `LOCAL_PATH`: relative path to folder containing your IoT rule file.
+    - IoT rule file example to trigger action `kinesis` and `republish` for error, you can optionally choose the approriate action for specific scenario, it could be `s3`, `lambda`, `dynamoDB`, etc:
+        - `ACTION_ROLE_NAME`: name of the IAM role that has permissions to access the Amazon Kinesis Firehose stream.
+        - `ERROR_ACTION_ROLE_NAME`: name of the IAM role that has permissions to republish the message to another MQTT topic `ERROR_TOPIC_NAME`.
+    ```json
+    {
+        "sql": "SELECT * FROM '<TOPIC_NAME>'",
+        "actions": [{
+            "firehose": {
+                "roleArn": "arn:aws:iam::<ACCOUNT_ID>:role/<ACTION_ROLE_NAME>",
+                "deliveryStreamName": "<STREAM_NAME>",
+                "separator": "\n",
+                "batchMode": false
+            }
+        }],
+        "errorAction": {
+            "republish": {
+                "roleArn": "arn:aws:iam::<ACCOUNT_ID>:role/<ERROR_ACTION_ROLE_NAME>",
+                "topic": "<ERROR_TOPIC_NAME>",
+                "qos": 0
+            }
+        },
+        "ruleDisabled": false,
+        "awsIotSqlVersion": "2016-03-23"
+    }
+    ```
+
+- Delete IoT rule
+    ```bash
+    aws iot delete-topic-rule --rule-name <IOT_RULE_NAME>
+    ```
+
 ## 2. How to use Docker
 
 ### Docker commands
