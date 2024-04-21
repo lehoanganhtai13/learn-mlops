@@ -1,8 +1,11 @@
 # Learn MLOps/DevOps
 A self-study repo, where there is everything you need for a MLOps system. This could also apply for DevOps system.
 
+### Agenda
+1. [AWS](#aws)
+2. [Docker](#docker)
 
-## 1. How to use AWS
+## <a name="aws"></a> 1. How to use AWS
 
 ### AWS CLI
 1. Credential configuration
@@ -116,8 +119,7 @@ A self-study repo, where there is everything you need for a MLOps system. This c
     ```
 - List all policies attached to group/user/role:
     ```bash
-    aws iam list-attached-[group/user/role]-policies    --[group/user/role]-name <NAME> \
-                                                        --scope <MANAGE_TYPE>
+    aws iam list-attached-[group/user/role]-policies --[group/user/role]-name <NAME> --scope <MANAGE_TYPE>
     ```
     - `MANAGE_TYPE`: we will use `All` for all policies including AWS-managed policies and the customer managed policies in your AWS account, `AWS` for only AWS-managed policies, and `Local` for only the customer managed policies in your AWS account.
 
@@ -187,7 +189,7 @@ A self-study repo, where there is everything you need for a MLOps system. This c
 
 - Grant data lake permissions for database and its tables
     ```bash
-    aws lakeformation grant-permissions --principal "{ "DataLakePrincipalIdentifier": "arn:aws:iam::<ACCOUNT_ID>:[user/role]/<[USER/ROLE]_NAME>" }" \
+    aws lakeformation grant-permissions --principal '{ "DataLakePrincipalIdentifier": "arn:aws:iam::<ACCOUNT_ID>:[user/role]/<[USER/ROLE]_NAME>" }' \
                                         --cli-input-json file://<LOCAL_PATH>/permissions.json
     ```
     - `LOCAL_PATH`: relative path to folder containing your permissions file.
@@ -243,7 +245,7 @@ A self-study repo, where there is everything you need for a MLOps system. This c
     ```
 
 6. Amazon Kinesis Data Firehose (data real-time streaming)
-- Create a Firehose delivery stream
+- Create a Firehose delivery stream to S3
     ```bash
     aws firehose create-delivery-stream --delivery-stream-name <STREAM_NAME> \
                                         --delivery-stream-type <STREAM_TYPE> \
@@ -261,9 +263,9 @@ A self-study repo, where there is everything you need for a MLOps system. This c
         - `DirectPut`: data records are delivered to your destination with no additional processing.
         - `KinesisStreamAsSource`: the delivery stream uses a `Kinesis Data Stream` as a source.
     - `PATH_TO_FOLDER`: the prefix that Firehose applies to the data record object names in S3, which simulates a folder structure in the S3 bucket where the streamed data is stored.
-    - `ROLE_NAME`: name of the IAM role that has permissions to access the S3 bucket.
     - `BUFFER_SIZE`: size of the buffer, in MBs, used for buffering incoming data before delivering it to the S3 bucket, the value should be between 1 and 128. The data is delivered to the S3 bucket when either the buffer size reaches or the time period elapses.
     - `BUFFER_INTERVAL`: the time, in seconds, for buffering incoming data before delivering it to the S3 bucket, the value should be between 60 (1 minute) and 900 (15 minutes).
+    - `ROLE_NAME`: name of the IAM role that has permissions to access the S3 bucket. IAM role for Kinesis can be created based on [here](https://github.com/lehoanganhtai13/data-lake-for-smart-farming-system-using-aws-services/tree/main/kinesis_policy).
 
 - Delete a delivery stream and its data
     ```bash
@@ -280,7 +282,7 @@ A self-study repo, where there is everything you need for a MLOps system. This c
     aws firehose list-delivery-streams
     ```
 
-7. AWS IoT Core
+7. AWS IoT Core (IoT communication via MQTT)
 - Create a thing
     ```bash
     aws iot create-thing --thing-name <THING_NAME>
@@ -297,37 +299,46 @@ A self-study repo, where there is everything you need for a MLOps system. This c
         "Version": "2012-10-17",
         "Statement": [
             {
-            "Effect": "Allow",
-            "Action": [
-                "iot:Publish",
-                "iot:Receive",
-                "iot:PublishRetain"
-            ],
-            "Resource": [
-                "arn:aws:iot:<REGION>:<ACCOUNT_ID>:topic/<IOT_TOPIC>",
-            ]
+                "Effect": "Allow",
+                "Action": [
+                    "iot:Publish",
+                    "iot:Receive",
+                    "iot:PublishRetain"
+                ],
+                "Resource": [
+                    "arn:aws:iot:<REGION>:<ACCOUNT_ID>:topic/<IOT_TOPIC>"
+                ]
             },
             {
-            "Effect": "Allow",
-            "Action": [
-                "iot:Subscribe"
-            ],
-            "Resource": [
-                "arn:aws:iot:<REGION>:<ACCOUNT_ID>:topicfilter/<IOT_TOPIC>",
-            ]
+                "Effect": "Allow",
+                "Action": [
+                    "iot:Subscribe"
+                ],
+                "Resource": [
+                    "arn:aws:iot:<REGION>:<ACCOUNT_ID>:topicfilter/<IOT_TOPIC>"
+                ]
             },
             {
-            "Effect": "Allow",
-            "Action": [
-                "iot:Connect"
-            ],
-            "Resource": [
-                "arn:aws:iot:<REGION>:<ACCOUNT_ID>:client/<CLIENT_ID>",
-            ]
+                "Effect": "Allow",
+                "Action": [
+                    "iot:Connect"
+                ],
+                "Resource": [
+                    "arn:aws:iot:<REGION>:<ACCOUNT_ID>:client/<CLIENT_ID>"
+                ]
             }
         ]
     }
     ```
+
+- Creates a 2048-bit RSA key pair and issues an X.509 certificate using the issued public key to create an IoT MQTT client
+    ```bash
+    aws iot create-keys-and-certificate --set-as-active \
+                                        --certificate-pem-outfile "<THING_NAME>.cert.pem" \
+                                        --public-key-outfile "<THING_NAME>.public.key" \
+                                        --private-key-outfile "<THING_NAME>.private.key"
+    ```
+    - File `root-CA.crt` - root certificate authority - can be downloaded here [here](https://www.amazontrust.com/repository/AmazonRootCA1.pem).
 
 - List all certificates info (ARN, ID, status, created date)
     ```bash
@@ -338,22 +349,55 @@ A self-study repo, where there is everything you need for a MLOps system. This c
     ```bash
     aws iot attach-policy --policy-name <POLICY_NAME> --target "<ARN>"
     ```
-    - `ARN`: the Amazon Resource Name of the target to be attached, usually is ARN of a certificate in this format `arn:aws:iot:<region>:<account-id>:cert/<certificate-id>`, if for a thing it would be `arn:aws:iot:<region>:<account-id>:thing/<thing-name>`, or `arn:aws:iot:<region>:<account-id>:thinggroup/<group-name>` for group of thing.
-
-- Creates a 2048-bit RSA key pair and issues an X.509 certificate using the issued public key to create an IoT MQTT client
-    ```bash
-    aws iot create-keys-and-certificate --set-as-active \
-                                        --certificate-pem-outfile "<THING_NAME>.cert.pem" \
-                                        --public-key-outfile "<THING_NAME>.public.key" \
-                                        --private-key-outfile "<THING_NAME>.private.key"
-    ```
-    - The `root_ca` - root certificate authority - can be downloaded here [here](https://www.amazontrust.com/repository/AmazonRootCA1.pem). 
+    - `ARN`: the Amazon Resource Name of the target to be attached, usually is ARN of a certificate in this format `arn:aws:iot:<region>:<account-id>:cert/<certificate-id>`, if for a thing it would be `arn:aws:iot:<region>:<account-id>:thing/<thing-name>`, or `arn:aws:iot:<region>:<account-id>:thinggroup/<group-name>` for group of thing. 
 
 - Attach a certificate to a thing
     ```bash
-    aws iot attach-policy --policy-name <POLICY_NAME> --target "arn:aws:iot:<REGION>:<ACCOUNT_ID>:cert/<CERTIFICATE_ID>"
+    aws iot attach-thing-principal --thing-name <THING_NAME> --principal "arn:aws:iot:<REGION>:<ACCOUNT_ID>:cert/<CERTIFICATE_ID>"
     ```
-    - `CERTIFICATE_ARN`:
+
+- Get a ATS endpointto the Amazon Web Services account making the call.
+    ```bash
+    aws iot describe-endpoint --endpoint-type iot:Data-ATS
+    ```
+
+- Connect to AWS IoT, subscribe and publish to a topic (Example code using AWS Python SDK)
+    ```python
+    import AWSIoTPythonSDK.MQTTLib as AWSIoTPyMQTT
+    import time
+    import json
+
+    # Callback when the subscribed topic receives a message
+    def customCallback(client, userdata, message):
+        print("Received a new message: ")
+        print(message.payload)
+        print("from topic: ")
+        print(message.topic)
+        print("--------------\n\n")
+
+    # Initialize the AWS IoT MQTT Client
+    myAWSIoTMQTTClient = AWSIoTPyMQTT.AWSIoTMQTTClient("<CLIENT_ID>")
+    myAWSIoTMQTTClient.configureEndpoint("<ENDPOINT>", 8883)
+    myAWSIoTMQTTClient.configureCredentials("<ROOT_CA_PATH>", "<PRIVATE_KEY_PATH>", "<CERTIFICATE_PATH>")
+
+    # Connect to AWS IoT
+    myAWSIoTMQTTClient.connect()
+
+    # Subscribe to a topic
+    myAWSIoTMQTTClient.subscribe("<TOPIC_NAME>", 1, customCallback)
+
+    # Publish messages to the topic
+    for i in range(10):
+        message = {"message": "Hello, world!", "sequence": i}
+        myAWSIoTMQTTClient.publish("<TOPIC_NAME>", json.dumps(message), 1)
+        print(f'Sent {i}')
+        time.sleep(1)  # Publish a message every second
+
+    # Disconnect from the topic
+    myAWSIoTMQTTClient.unsubscribe("<TOPIC_NAME>")
+    myAWSIoTMQTTClient.disconnect()
+    ```
+
 
 - Create a rule for AWS IoT to listen to MQTT topics and invoke actions when certain conditions are met
     ```bash
@@ -363,6 +407,10 @@ A self-study repo, where there is everything you need for a MLOps system. This c
     - IoT rule file example to trigger action `kinesis` and `republish` for error, you can optionally choose the approriate action for specific scenario, it could be `s3`, `lambda`, `dynamoDB`, etc:
         - `ACTION_ROLE_NAME`: name of the IAM role that has permissions to access the Amazon Kinesis Firehose stream.
         - `ERROR_ACTION_ROLE_NAME`: name of the IAM role that has permissions to republish the message to another MQTT topic `ERROR_TOPIC_NAME`.
+        - `qos`: Quality of Service (QoS) level for the MQTT subscription
+            - QoS 0: the message is delivered at most once. This is the fastest mode of transfer, but there's no guarantee that the message is received.
+            - QoS 1: the message is delivered at least once. The sender stores the message until it gets an acknowledgement from the receiver. This ensures that the message is received, but there might be duplicates.
+            - QoS 2: the message is delivered exactly once. This is the safest, but slowest mode of transfer.
     ```json
     {
         "sql": "SELECT * FROM '<TOPIC_NAME>'",
@@ -378,7 +426,7 @@ A self-study repo, where there is everything you need for a MLOps system. This c
             "republish": {
                 "roleArn": "arn:aws:iam::<ACCOUNT_ID>:role/<ERROR_ACTION_ROLE_NAME>",
                 "topic": "<ERROR_TOPIC_NAME>",
-                "qos": 0
+                "qos": 1
             }
         },
         "ruleDisabled": false,
@@ -386,12 +434,42 @@ A self-study repo, where there is everything you need for a MLOps system. This c
     }
     ```
 
+- Detach the certificate from the thing
+    ```bash
+    aws iot detach-thing-principal --thing-name <THING_NAME> --principal "arn:aws:iot:<REGION>:<ACCOUNT_ID>:cert/<CERTIFICATE_ID>"
+    ```
+
+- Deactivate the certificate
+    ```bash
+    aws iot update-certificate --certificate-id <CERTIFICATE_ID> --new-status INACTIVE
+    ```
+
+- Detach the policy from the certificate
+    ```bash
+    aws iot detach-policy --policy-name <POLICY_NAME> --target "arn:aws:iot:<REGION>:<ACCOUNT_ID>:cert/<CERTIFICATE_ID>"
+    ```
+
+- Delete the certificate
+    ```bash
+    aws iot delete-certificate --certificate-id <CERTIFICATE_ID>
+    ```
+
+- Delete the IoT policy
+    ```bash
+    aws iot delete-policy --policy-name <POLICY_NAME>
+    ```
+
+- Delete the thing
+    ```bash
+    aws iot delete-thing --thing-name <THING_NAME>
+    ```
+
 - Delete IoT rule
     ```bash
     aws iot delete-topic-rule --rule-name <IOT_RULE_NAME>
     ```
 
-## 2. How to use Docker
+## <a name="docker"></a> 2. How to use Docker
 
 ### Docker commands
 1. Run container
